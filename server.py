@@ -10,7 +10,7 @@ import socket
 #INICIALIZACAO
 
 SERVER_PORT=12000
-
+#Socket creation (UDP)
 server = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
 server.bind(('',12000))
 
