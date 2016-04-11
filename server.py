@@ -27,6 +27,7 @@ msg_OK = "OK"
 msg_nOK_register = "NOK$name exists"
 msg_nOK_unregister = "NOK$name doesn't exist"
 msg_nOK_unknownclient = "NOK$requested player is not connected to the server"
+msg_nOK_busy = "NOK$Player is busy"
 msg_list = "LIST$"
 
 
@@ -103,6 +104,14 @@ def forward(name, message):
         server.sendto(message_relay, address)
 
 
+def set_busy(address):
+    statusList[clientList[address]] = "busy"
+
+
+def set_free(address):
+    statusList[clientList[address]] = "free"
+
+
 # MAIN BODY
 while True:
     (msg, addr) = server.recvfrom(1024)
@@ -118,7 +127,11 @@ while True:
         print("Invitation: "+ msg)
         # check if requested player exists in the server
         if cmds[1].split(';')[1] in addressList:
-            forward(cmds[1].split(';')[1], msg)
+            # check if it's free
+            if statusList[cmds[1].split(';')[1]] == "free":
+                forward(cmds[1].split(';')[1], msg)
+            else:
+                server.sendto(msg_nOK_busy, addr)
         else:
             server.sendto(msg_nOK_unknownclient, addr)
     elif cmds[0] == "inviteR":
@@ -127,8 +140,12 @@ while True:
     elif cmds[0] == "play":
         forward(cmds[1].split(';')[1], msg)
     elif cmds[0] == "OK" or cmds[0] == "NOK":
-        #relay client to client ack messages
+        # relay client to client ack messages
         forward(cmds[1].split(';')[1], msg)
+    elif cmds[0] == "busy":
+        set_busy(addr)
+    elif cmds[0] == "free":
+        set_free(addr)
     elif cmds[0] == "kill":
         break
     else:

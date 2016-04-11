@@ -123,6 +123,7 @@ def invite(m):
             print("Invitation accepted")
             update_status(2)
             update_opponent(m[1])
+            sock.sendto("busy", (SERVER_IP, SERVER_PORT))
             global piece
             piece = "X"
             ttt_start_game()
@@ -157,6 +158,7 @@ def invite_reply(m):
             print(opponent)
             update_opponent(invite_msg[0])
             print(opponent)
+            sock.sendto("busy", (SERVER_IP, SERVER_PORT))
             global piece
             piece = "O"
             ttt_start_game()
@@ -201,6 +203,7 @@ def play(place):
     if result == "OK":
         result = play_wait()
         if result == "quit":
+            sock.sendto("free", (SERVER_IP, SERVER_PORT))
             update_status(1)
             return
     else:
@@ -227,24 +230,28 @@ def play_wait():
             if board[place] == "X" or board[place] == "Y":
                 sock.sendto(nok_msg, (SERVER_IP, SERVER_PORT))
                 # continue to wait
+                continue
             else:
                 board[place] = piece
+                sock.sendto(ok_msg, (SERVER_IP, SERVER_PORT))
                 game_state = check_if_win()
                 if game_state == "win":
                     outbound(end_msg_v)
                     return
                 elif game_state == "draw":
                     outbound(end_msg_d)
-                else:
-                    sock.sendto(ok_msg, (SERVER_IP, SERVER_PORT))
+                    continue
+                elif game_state == " ":
                     ttt_play()
         elif result.split('$')[0] == "fim":
             print("Game ended: " + result.split('$')[1].split(';')[0])
             print("quitting game...")
             update_status(1)
+            sock.sendto("free", (SERVER_IP, SERVER_PORT))
             return "quit"
         else:
             print("result")
+            sock.sendto("free", (SERVER_IP, SERVER_PORT))
             print("quitting game...")
             return "quit"
 
@@ -266,8 +273,9 @@ def check_if_win():
         return "win"
     if board[2] == board[4] == board[6]:
         return "win"
-    if board.count("X") == board.count("O")-1:
+    if board.count("X") == 5:
         return "draw"
+
 
 def inbound(time):
     sock.settimeout(time)
@@ -344,15 +352,15 @@ while True:
                     print("ERROR: You must finish your game first")
                 else:
                     invite(msg)
-            elif msg[0] == "play":
-                if opponent == " ":
-                    print("You cannot play without choosing an opponent")
-                elif status == 0:
-                    print("ERROR: You're not registered with the server")
-                elif status == 2:
-                    print("ERROR: You must finish your game first")
-                else:
-                    play(msg)
+           # elif msg[0] == "play":
+           #     if opponent == " ":
+           #         print("You cannot play without choosing an opponent")
+           #     elif status == 0:
+           #         print("ERROR: You're not registered with the server")
+           #     elif status == 2:
+           #         print("ERROR: You must finish your game first")
+           #     else:
+           #         play(msg)
 
             # envia mensagem da consola para o servidor
         # i == sock - o servidor enviou uma mensagem para o socket
