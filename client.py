@@ -67,7 +67,6 @@ def unregister(m):
 
 
 def list_request():
-
     trials = 0
     max_trials = 9
     sock.settimeout(1.0)
@@ -78,7 +77,7 @@ def list_request():
             sock.sendto("list", (SERVER_IP, SERVER_PORT))
             (msg_reply, address) = sock.recvfrom(1024)
             ack_server()
-            break;
+            break
         except socket.timeout:
             trials += 1
 
@@ -140,7 +139,7 @@ def invite_reply(m):
 
 def play(m):
     msg_to_server = m[0] + "$" + m[1] + ";" + name + ";" + opponent
-    # falta aqui a logica de jogo
+    # game logic is missing here
     result = outbound(msg_to_server)
 
     if result == "OK":
@@ -182,22 +181,22 @@ def play_wait():
 
 
 def inbound(time):
-    #sock.settimeout(time)
+    sock.settimeout(time)
     try:
-        (msg_reply, address) = sock.recvfrom(1024)
+        (reply, address) = sock.recvfrom(1024)
         sock.settimeout(None)
     except socket.timeout:
         sock.settimeout(None)
         return "ERROR: No reply received from the client"
 
-    return msg_reply
+    return reply
 
 
 def outbound(msg_to_server):
     trials = 0
     max_trials = 9
     # 1s timeout
-    # sock.settimeout(1.0)
+    sock.settimeout(1.0)
 
     msg_reply = " "
     # send message to server

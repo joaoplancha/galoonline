@@ -68,20 +68,24 @@ def client_list(address):
 
 
 def outbound(msg_to_client, address):
-    #trials = 0
-    #max_trials = 9
+    trials = 0
+    max_trials = 9
     # 1s timeout
-    #server.settimeout(1.0)
+    server.settimeout(1.0)
     msg_reply = " "
 
-    #while trials < max_trials:
-    #    try:
-    server.sendto(msg_to_client, address)
-    (msg_reply, address) = server.recvfrom(1024)
-    #    except socket.timeout:
-    #        trials += 1
+    while trials < max_trials:
+        try:
+            server.sendto(msg_to_client, address)
+            (msg_reply, address) = server.recvfrom(1024)
+            break
+        except socket.timeout:
+            trials += 1
 
-    #server.settimeout(None)
+    server.settimeout(None)
+
+    if trials == max_trials:
+        print("ERROR: did not receive ACK from client")
 
 
 # Client to Client forwarding function
