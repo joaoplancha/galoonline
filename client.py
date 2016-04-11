@@ -14,6 +14,8 @@ inputs = [sock, sys.stdin]
 status = 0
 name = " "
 opponent = " "
+board = []
+piece = " "
 
 
 def update_status(new):
@@ -32,8 +34,8 @@ def ack_server():
 
 
 def ack_client(m):
-    arg2 = m.split['$'][1].split[';'][0]
-    arg1 = m.split['$'][1].split[';'][1]
+    arg2 = m.split('$')[1].split(';')[0]
+    arg1 = m.split('$')[1].split(';')[1]
     ack_msg = "OK$" + arg1 + ";" + arg2
     print("ack: "+ ack_msg)
     # send the ack to client (through server relay)
@@ -107,19 +109,26 @@ def list_request():
 def invite(m):
     # invite message formation to send through server to the client we want to invite
     invite_msg = m[0] + "$" + name + ";" + m[1]
-    print(invite_msg)
     # send the message to client through server
     # it's the server responsibility to interpret and relay as appropriate
     result = outbound(invite_msg)
 
     if result == "OK":
-        result = inbound(60.0)
-        if result.split('$')[0] == "inviteR" and result.split('$')[1].split(';')[0] == "Y":
+        print("invitation received by other client. waiting for reply")
+        (reply, address) = sock.recvfrom(1024)
+        # result = inbound(60.0)
+        if reply.split('$')[0] == "inviteR" and reply.split('$')[1].split(';')[0] == "Y":
+            ack_client("OK$" + m[1] + ";" + name)
+            print("OK$" + name + ";" + m[1])
             print("Invitation accepted")
             update_status(2)
             update_opponent(m[1])
-            return
-        elif result.split('$')[0] == "inviteR" and result.split('$')[1].split(';')[0] == "N":
+            global piece
+            piece = "X"
+            ttt_start_game()
+            ttt_play()
+        elif reply.split('$')[0] == "inviteR" and reply.split('$')[1].split(';')[0] == "N":
+            ack_client("OK$" + m[1] + ";" + name)
             print("Invitation not accepted")
             return
         else:
@@ -148,6 +157,9 @@ def invite_reply(m):
             print(opponent)
             update_opponent(invite_msg[0])
             print(opponent)
+            global piece
+            piece = "O"
+            ttt_start_game()
             play_wait()
         else:
             print(result)
@@ -155,40 +167,77 @@ def invite_reply(m):
     elif choice == "N\n":
         outbound(reply_msg_n)
         return
+    return
 
 
-def play(m):
-    msg_to_server = m[0] + "$" + m[1] + ";" + name + ";" + opponent
-    # game logic is missing here
+def ttt_start_game():
+    j = 0
+    while j <= 8:
+        board.append(j)
+        j += 1
+
+
+def ttt_play():
+    print
+    print(" " + str(board[0]) + " | " + str(board[1]) + " | " + str(board[2]))
+    print(" --- --- ---")
+    print(" " + str(board[3]) + " | " + str(board[4]) + " | " + str(board[5]))
+    print(" --- --- ---")
+    print(" " + str(board[6]) + " | " + str(board[7]) + " | " + str(board[8]))
+    print
+    print("Make your move (0-8)")
+    move = sys.stdin.readline()
+    place = int(move)
+
+    play(place)
+    return
+
+
+def play(place):
+
+    msg_to_server = "play$" + name + ";" + opponent + ";" + str(place)
     result = outbound(msg_to_server)
 
     if result == "OK":
         result = play_wait()
         if result == "quit":
-            # need to update server as well... after that, we can reduce the timeout
             update_status(1)
             return
     else:
         print(result)
-        # need to update server as well... after that, we can reduce the timeout
-        update_status(1)
-        print("quitting game...")
-        return
+        ttt_play()
 
 
 def play_wait():
     print("entered wait")
 
     ok_msg = "OK$" + name + ";" + opponent
+    nok_msg = "NOK$" + name + ";" + opponent + "Invalid move"
+    end_msg_v = "fim$" + name + ";" + opponent + "Victory"
+    end_msg_d = "fim$" + name + ";" + opponent + "Draw"
 
     # wait for opponent to play
     print("Waiting for the other player to make a move...")
     while True:
-        result = inbound(1000.0)
+        # result = inbound(1000.0)
+        (result, address) = sock.recvfrom(1024)
+        print("jogada recebida: " + result)
+        place = int(result.split('$')[1].split(';')[2])
         if result.split('$')[0] == "play":
-            # falta aqui a logica de jogo
-            sock.sendto(ok_msg, (SERVER_IP, SERVER_PORT))
-            return
+            if board[place] == "X" or board[place] == "Y":
+                sock.sendto(nok_msg, (SERVER_IP, SERVER_PORT))
+                # continue to wait
+            else:
+                board[place] = piece
+                game_state = check_if_win()
+                if game_state == "win":
+                    outbound(end_msg_v)
+                    return
+                elif game_state == "draw":
+                    outbound(end_msg_d)
+                else:
+                    sock.sendto(ok_msg, (SERVER_IP, SERVER_PORT))
+                    ttt_play()
         elif result.split('$')[0] == "fim":
             print("Game ended: " + result.split('$')[1].split(';')[0])
             print("quitting game...")
@@ -199,6 +248,26 @@ def play_wait():
             print("quitting game...")
             return "quit"
 
+
+def check_if_win():
+    if board[0] == board[1] == board[2]:
+        return "win"
+    if board[3] == board[4] == board[5]:
+        return "win"
+    if board[6] == board[7] == board[8]:
+        return "win"
+    if board[0] == board[3] == board[6]:
+        return "win"
+    if board[1] == board[4] == board[7]:
+        return "win"
+    if board[2] == board[5] == board[8]:
+        return "win"
+    if board[0] == board[4] == board[8]:
+        return "win"
+    if board[2] == board[4] == board[6]:
+        return "win"
+    if board.count("X") == board.count("O")-1:
+        return "draw"
 
 def inbound(time):
     sock.settimeout(time)
@@ -216,7 +285,6 @@ def outbound(msg_to_server):
     max_trials = 9
     # 1s timeout
     sock.settimeout(1.0)
-
     msg_reply = " "
     # send message to server
     # if no reply is received after 1s, the message will be sent again
@@ -225,17 +293,21 @@ def outbound(msg_to_server):
         try:
             sock.sendto(msg_to_server, (SERVER_IP, SERVER_PORT))
             (msg_reply, address) = sock.recvfrom(1024)
+            sock.settimeout(None)
             break;
         except socket.timeout:
             trials += 1
+        print("iter")
     sock.settimeout(None)
-
+    print("outbound message reply " + msg_reply)
     if trials == max_trials:
         return "ERROR: unable to reach server"
-    elif msg_reply.split('$')[0] == "OK":
+    elif msg_reply == "OK":
         return "OK"
     elif msg_reply.split('$')[0] == "NOK":
         return msg_reply.split('$')[1]
+    elif msg_reply.split('$')[0] == "OK":
+        return "OK"
 
 
 while True:
@@ -290,7 +362,5 @@ while True:
             msg = msg_temp.split('$')
             if msg[0] == "invite" and status == 1:
                 invite_reply(msg)
-            else:
+            elif msg[0] == "invite" and status == 2:
                 print("Not available at the moment. Playing a game")
-
-

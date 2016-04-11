@@ -66,7 +66,6 @@ def client_list(address):
         msg_str += values
         l.append(str(msg_str))
     msg_out = msg_list + str(l)[1:len(str(l))-1]
-    print(msg_out)
     outbound(msg_out, address)
 
 
@@ -116,16 +115,18 @@ while True:
     elif cmds[0] == "list":
         client_list(addr)
     elif cmds[0] == "invite":
+        print("Invitation: "+ msg)
         # check if requested player exists in the server
         if cmds[1].split(';')[1] in addressList:
             forward(cmds[1].split(';')[1], msg)
         else:
             server.sendto(msg_nOK_unknownclient, addr)
     elif cmds[0] == "inviteR":
-        forward(cmds[1].split(';')[1], msg)
+        print("Invitation Reply: " + msg)
+        forward(cmds[1].split(';')[2], msg)
     elif cmds[0] == "play":
         forward(cmds[1].split(';')[1], msg)
-    elif cmds[0] == "OK" or cmds[1] == "NOK":
+    elif cmds[0] == "OK" or cmds[0] == "NOK":
         #relay client to client ack messages
         forward(cmds[1].split(';')[1], msg)
     elif cmds[0] == "kill":
