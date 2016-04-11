@@ -90,8 +90,12 @@ def list_request():
 
 
 def invite(m):
+    #
+    #need to remove \n in the end of name...
+    #
 
     invite_msg = m[0] + "$" + name + ";" + m[1]
+    print(invite_msg)
     result = outbound(invite_msg)
 
     if result == "OK":
