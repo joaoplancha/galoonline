@@ -35,6 +35,7 @@ def ack_client(m):
     arg2 = m.split['$'][1].split[';'][0]
     arg1 = m.split['$'][1].split[';'][1]
     ack_msg = "OK$" + arg1 + ";" + arg2
+    print("ack: "+ ack_msg)
     # send the ack to client (through server relay)
     sock.sendto(ack_msg, (SERVER_IP, SERVER_PORT))
 
@@ -70,7 +71,7 @@ def list_request():
     trials = 0
     max_trials = 9
     sock.settimeout(1.0)
-    msg_reply = " "
+    msg_reply = ""
 
     while trials < max_trials:
         try:
@@ -86,20 +87,33 @@ def list_request():
     if trials == max_trials:
         print("ERROR: unable to reach server")
     else:
-        print(msg_reply)
+        print("--------- PLAYER LIST ---------")
+        print("-------------------------------")
+        print("Name \t\t\tStatus")
+        print("-------------------------------")
+        msg_reply = msg_reply.split('$')[1]
+        l = msg_reply.split(', ')
+        j = 0
+        while j < len(l):
+            namel = str(l[j].split(":")[0]).replace('\'', "")
+            statusl = str(l[j].split(":")[1]).replace('\'', "")
+            # namel = str(l[j].split(":")[0])[1:len(str(l[j].split(":")[0]))]
+            # statusl = str(l[j].split(":")[1])[0:len(str(l[j].split(":")[0]))-1]
+            print(namel + "\t\t\t" + statusl)
+            j += 1
+        print("-------------------------------")
 
 
 def invite(m):
-    #
-    #need to remove \n in the end of name...
-    #
-
+    # invite message formation to send through server to the client we want to invite
     invite_msg = m[0] + "$" + name + ";" + m[1]
     print(invite_msg)
+    # send the message to client through server
+    # it's the server responsibility to interpret and relay as appropriate
     result = outbound(invite_msg)
 
     if result == "OK":
-        result = inbound(20.0)
+        result = inbound(60.0)
         if result.split('$')[0] == "inviteR" and result.split('$')[1].split(';')[0] == "Y":
             print("Invitation accepted")
             update_status(2)
@@ -116,14 +130,16 @@ def invite(m):
 
 def invite_reply(m):
 
-    reply_msg_y = "inviteR$Y;" + name + ";" + opponent
-    reply_msg_n = "inviteR$N;" + name + ";" + opponent
-
     invite_msg = m[1].split(';')
+
+    reply_msg_y = "inviteR$Y;" + invite_msg[1] + ";" + invite_msg[0]
+    reply_msg_n = "inviteR$N;" + invite_msg[1] + ";" + invite_msg[0]
+
     print(invite_msg[0] + " is inviting you to play")
     print("Do you accept the invitation? (Y/N)")
+
     choice = sys.stdin.readline()
-    if choice == "Y":
+    if choice == "Y\n":
         result = outbound(reply_msg_y)
         if result == "OK":
             print(status)
@@ -136,7 +152,7 @@ def invite_reply(m):
         else:
             print(result)
             return
-    elif choice == "N":
+    elif choice == "N\n":
         outbound(reply_msg_n)
         return
 
@@ -189,11 +205,10 @@ def inbound(time):
     try:
         (reply, address) = sock.recvfrom(1024)
         sock.settimeout(None)
+        return reply
     except socket.timeout:
         sock.settimeout(None)
         return "ERROR: No reply received from the client"
-
-    return reply
 
 
 def outbound(msg_to_server):
@@ -217,7 +232,7 @@ def outbound(msg_to_server):
 
     if trials == max_trials:
         return "ERROR: unable to reach server"
-    elif msg_reply == "OK":
+    elif msg_reply.split('$')[0] == "OK":
         return "OK"
     elif msg_reply.split('$')[0] == "NOK":
         return msg_reply.split('$')[1]
@@ -232,6 +247,7 @@ while True:
         if i == sys.stdin:
             # sys.stdin.readline() le da consola
             msg_temp = sys.stdin.readline()
+            msg_temp = msg_temp.replace('\n', '')
             msg = msg_temp.split(' ')
 
             if msg[0] == "register":
@@ -239,14 +255,14 @@ while True:
                     print("ERROR: You're already registered with the server")
                 else:
                     register(msg)
-            elif msg[0] == "unregister\n":
+            elif msg[0] == "unregister":
                 if status == 0:
                     print("ERROR: You're not registered with the server")
                 elif status == 2:
                     print("ERROR: You must finish your game first")
                 else:
                     unregister(msg)
-            elif msg[0] == "list\n":
+            elif msg[0] == "list":
                 print("requesting list...")
                 list_request()
             elif msg[0] == "invite":
@@ -270,10 +286,11 @@ while True:
         # i == sock - o servidor enviou uma mensagem para o socket
         elif i == sock:
             (msg_temp, addr) = sock.recvfrom(1024)
+            ack_client(msg_temp)
             msg = msg_temp.split('$')
-            if msg[0] == "invite":
+            if msg[0] == "invite" and status == 1:
                 invite_reply(msg)
             else:
-                "don't know what to do"
+                print("Not available at the moment. Playing a game")
 
 

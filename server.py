@@ -26,6 +26,7 @@ msg_invalid = "Command not recognized"
 msg_OK = "OK"
 msg_nOK_register = "NOK$name exists"
 msg_nOK_unregister = "NOK$name doesn't exist"
+msg_nOK_unknownclient = "NOK$requested player is not connected to the server"
 msg_list = "LIST$"
 
 
@@ -59,11 +60,13 @@ def unregister(address):
 # Client List
 def client_list(address):
     l = []
+    msg_str = ""
     for keys, values in statusList.items():
-        l.append(keys)
-        l.append(values)
-    msg_list_content = str(l)[1:len(str(l))-1]
-    msg_out = msg_list + msg_list_content
+        msg_str = keys + ":"
+        msg_str += values
+        l.append(str(msg_str))
+    msg_out = msg_list + str(l)[1:len(str(l))-1]
+    print(msg_out)
     outbound(msg_out, address)
 
 
@@ -72,7 +75,7 @@ def outbound(msg_to_client, address):
     max_trials = 9
     # 1s timeout
     server.settimeout(1.0)
-    msg_reply = " "
+    msg_reply = ""
 
     while trials < max_trials:
         try:
@@ -88,8 +91,13 @@ def outbound(msg_to_client, address):
         print("ERROR: did not receive ACK from client")
 
 
-# Client to Client forwarding function
+# Client to Client message relay function
 def forward(name, message):
+    # message is already well formed (invite$player1;player2)
+    # ACK messages will use this function as well. their format will not be changed
+    # it's the client responsibility to create coherent messages
+    # server doesn't care if the message is received or not. Client needs to take care of that.
+    # in client2client communication, the server is just a relay between clients
     if name in addressList:
         message_relay = message
         address = addressList[name]
@@ -108,10 +116,18 @@ while True:
     elif cmds[0] == "list":
         client_list(addr)
     elif cmds[0] == "invite":
+        # check if requested player exists in the server
+        if cmds[1].split(';')[1] in addressList:
+            forward(cmds[1].split(';')[1], msg)
+        else:
+            server.sendto(msg_nOK_unknownclient, addr)
+    elif cmds[0] == "inviteR":
         forward(cmds[1].split(';')[1], msg)
     elif cmds[0] == "play":
-        # play
-        forward(args[1], msg)
+        forward(cmds[1].split(';')[1], msg)
+    elif cmds[0] == "OK" or cmds[1] == "NOK":
+        #relay client to client ack messages
+        forward(cmds[1].split(';')[1], msg)
     elif cmds[0] == "kill":
         break
     else:
