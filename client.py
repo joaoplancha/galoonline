@@ -20,7 +20,7 @@ while True:
     if i == sys.stdin:
       # sys.stdin.readline() le da consola
       msg = sys.stdin.readline()
-      # envia mensagem da consola para o servidor
+         # envia mensagem da consola para o servidor
       sock.sendto(msg.encode(),(SERVER_IP,SERVER_PORT))
     # i == sock - o servidor enviou uma mensagem para o socket
     elif i == sock:
