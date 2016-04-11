@@ -25,15 +25,13 @@ statusList = {} # dict: client -> status
 msg_invalid = "Command not recognized"
 msg_OK = "OK"
 msg_nOK_register = "NOK$name exists"
-msg_nOK_unregister = "NOK$name exists"
-msg_list_size = "LISTSIZE$"
+msg_nOK_unregister = "NOK$name doesn't exist"
 msg_list = "LIST$"
-msg_list_end = "LISTEND$"
 
 
 # Invalid option selected - command not recognized
-def invalid(ipaddress):
-    server.sendto(msg_invalid, ipaddress)
+def invalid(address):
+    server.sendto(msg_invalid, address)
 
 
 # Client register
@@ -47,22 +45,43 @@ def register(client, address):
         server.sendto(msg_nOK_register, address)
 
 
-def unregister(client, address):
+def unregister(address):
+    client = clientList[address]
     if client in addressList:
         del addressList[client]
         del statusList[client]
         del clientList[address]
-        server.sendto(msg_OK,address)
+        server.sendto(msg_OK, address)
     else:
-        server.sendto(msg_nOK_unregister,address)
+        server.sendto(msg_nOK_unregister, address)
 
 
 # Client List
 def client_list(address):
-    server.sendto(msg_list_size + len(statusList),address)
-    for keys,values in statusList.items():
-        server.sendto(msg_list + str(keys) + ":" + str(values),address)
-    server.sendto(msg_list_end + len(statusList),address)
+    l = []
+    for keys, values in statusList.items():
+        l.append(keys)
+        l.append(values)
+    msg_list_content = str(l)[1:len(str(l))-1]
+    msg_out = msg_list + msg_list_content
+    outbound(msg_out, address)
+
+
+def outbound(msg_to_client, address):
+    #trials = 0
+    #max_trials = 9
+    # 1s timeout
+    #server.settimeout(1.0)
+    msg_reply = " "
+
+    #while trials < max_trials:
+    #    try:
+    server.sendto(msg_to_client, address)
+    (msg_reply, address) = server.recvfrom(1024)
+    #    except socket.timeout:
+    #        trials += 1
+
+    #server.settimeout(None)
 
 
 # Client to Client forwarding function
@@ -70,21 +89,25 @@ def forward(name, message):
     if name in addressList:
         message_relay = message
         address = addressList[name]
-        server.sendto(message_relay.encode(), address)
+        server.sendto(message_relay, address)
 
 
-# CORPO PRINCIPAL
+# MAIN BODY
 while True:
     (msg, addr) = server.recvfrom(1024)
+    # get the command
     cmds = msg.decode().split('$')
     if cmds[0] == "register":
         register(cmds[1], addr)
     elif cmds[0] == "unregister":
-        unregister(cmds[1], addr)
+        unregister(addr)
     elif cmds[0] == "list":
         client_list(addr)
     elif cmds[0] == "invite":
-        forward(cmds[1], msg)
+        forward(cmds[1].split(';')[1], msg)
+    elif cmds[0] == "play":
+        # play
+        forward(args[1], msg)
     elif cmds[0] == "kill":
         break
     else:
