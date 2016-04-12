@@ -16,6 +16,7 @@ name = " "
 opponent = " "
 board = []
 piece = " "
+piece2 = " "
 
 
 def update_status(new):
@@ -37,7 +38,7 @@ def ack_client(m):
     arg2 = m.split('$')[1].split(';')[0]
     arg1 = m.split('$')[1].split(';')[1]
     ack_msg = "OK$" + arg1 + ";" + arg2
-    print("ack: "+ ack_msg)
+    print("ack: " + ack_msg)
     # send the ack to client (through server relay)
     sock.sendto(ack_msg, (SERVER_IP, SERVER_PORT))
 
@@ -126,6 +127,8 @@ def invite(m):
             sock.sendto("busy", (SERVER_IP, SERVER_PORT))
             global piece
             piece = "X"
+            global piece2
+            piece2 = "O"
             ttt_start_game()
             ttt_play()
         elif reply.split('$')[0] == "inviteR" and reply.split('$')[1].split(';')[0] == "N":
@@ -149,7 +152,7 @@ def invite_reply(m):
     print("Do you accept the invitation? (Y/N)")
 
     choice = sys.stdin.readline()
-    if choice == "Y\n":
+    if choice == "Y\n" or choice == "y\n" or choice == "\n":
         result = outbound(reply_msg_y)
         if result == "OK":
             print(status)
@@ -161,36 +164,44 @@ def invite_reply(m):
             sock.sendto("busy", (SERVER_IP, SERVER_PORT))
             global piece
             piece = "O"
+            global piece2
+            piece2 = "X"
             ttt_start_game()
+            ttt_print()
             play_wait()
         else:
             print(result)
             return
-    elif choice == "N\n":
+    elif choice == "N\n" or choice == "n\n":
         outbound(reply_msg_n)
         return
     return
 
 
 def ttt_start_game():
+    global board
+    board = []
     j = 0
     while j <= 8:
         board.append(j)
         j += 1
 
 
-def ttt_play():
-    print
+def ttt_print():
+    print(" ")
     print(" " + str(board[0]) + " | " + str(board[1]) + " | " + str(board[2]))
     print(" --- --- ---")
     print(" " + str(board[3]) + " | " + str(board[4]) + " | " + str(board[5]))
     print(" --- --- ---")
     print(" " + str(board[6]) + " | " + str(board[7]) + " | " + str(board[8]))
-    print
+    print(" ")
+
+
+def ttt_play():
+    ttt_print()
     print("Make your move (0-8)")
     move = sys.stdin.readline()
     place = int(move)
-
     play(place)
     return
 
@@ -201,6 +212,8 @@ def play(place):
     result = outbound(msg_to_server)
 
     if result == "OK":
+        board[place] = piece
+        ttt_print()
         result = play_wait()
         if result == "quit":
             sock.sendto("free", (SERVER_IP, SERVER_PORT))
@@ -212,75 +225,94 @@ def play(place):
 
 
 def play_wait():
-    print("entered wait")
 
     ok_msg = "OK$" + name + ";" + opponent
-    nok_msg = "NOK$" + name + ";" + opponent + "Invalid move"
-    end_msg_v = "fim$" + name + ";" + opponent + "Victory"
-    end_msg_d = "fim$" + name + ";" + opponent + "Draw"
+    nok_msg = "NOK$" + name + ";" + opponent + ";" + "Invalid move"
+    end_msg_v = "fim$" + name + ";" + opponent + ";" + "You WIN!"
+    end_msg_d = "fim$" + name + ";" + opponent + ";" + "It's a Draw"
+    game_state = 0
 
     # wait for opponent to play
     print("Waiting for the other player to make a move...")
     while True:
+        # check if the game is over
+        if game_state == 1 or game_state == 2:
+            ttt_print()
+            if game_state == 1:
+                print("Game ended, You lost!")
+            if game_state == 2:
+                print("Game ended, it's a draw!")
+            print("quitting game...")
+            update_status(1)
+            break
+
         # result = inbound(1000.0)
         (result, address) = sock.recvfrom(1024)
         print("jogada recebida: " + result)
+
+        if result.split('$')[0] == "fim":
+            ack_client(result)
+            print("Game ended. " + result.split('$')[1].split(';')[2])
+            print("quitting game...")
+            update_status(1)
+            sock.sendto("free", (SERVER_IP, SERVER_PORT))
+            break
+
         place = int(result.split('$')[1].split(';')[2])
+
         if result.split('$')[0] == "play":
-            if board[place] == "X" or board[place] == "Y":
+            if board[place] == "X" or board[place] == "O":
                 sock.sendto(nok_msg, (SERVER_IP, SERVER_PORT))
                 # continue to wait
                 continue
             else:
-                board[place] = piece
+                board[place] = piece2
                 sock.sendto(ok_msg, (SERVER_IP, SERVER_PORT))
                 game_state = check_if_win()
-                if game_state == "win":
+                if game_state == 1:
                     outbound(end_msg_v)
-                    return
-                elif game_state == "draw":
+                    continue
+                elif game_state == 2:
                     outbound(end_msg_d)
                     continue
-                elif game_state == "ongoing":
+                elif game_state == 0:
                     ttt_play()
-        elif result.split('$')[0] == "fim":
-            print("Game ended: " + result.split('$')[1].split(';')[0])
-            print("quitting game...")
-            update_status(1)
-            sock.sendto("free", (SERVER_IP, SERVER_PORT))
-            return "quit"
         else:
             print("result")
             sock.sendto("free", (SERVER_IP, SERVER_PORT))
-            print("quitting game...")
-            return "quit"
+            # clean game board
+            ttt_start_game()
+            print("quitting game... CHECK THIS!")
+
+        # leaving the game being played, no matter the reason
+        return "quit"
 
 
 def check_if_win():
     # lines
     if board[0] == board[1] == board[2]:
-        return "win"
+        return 1
     elif board[3] == board[4] == board[5]:
-        return "win"
+        return 1
     elif board[6] == board[7] == board[8]:
-        return "win"
-    # columns
+        return 1
+        # columns
     elif board[0] == board[3] == board[6]:
-        return "win"
+        return 1
     elif board[1] == board[4] == board[7]:
-        return "win"
+        return 1
     elif board[2] == board[5] == board[8]:
-        return "win"
+        return 1
     # diagonals
     elif board[0] == board[4] == board[8]:
-        return "win"
+        return 1
     elif board[2] == board[4] == board[6]:
-        return "win"
+        return 1
     # full board, no win
     elif board.count("X") == 5:
-        return "draw"
+        return 2
     else:
-        return "ongoing"
+        return 0
 
 
 def inbound(time):
@@ -308,12 +340,12 @@ def outbound(msg_to_server):
             sock.sendto(msg_to_server, (SERVER_IP, SERVER_PORT))
             (msg_reply, address) = sock.recvfrom(1024)
             sock.settimeout(None)
-            break;
+            break
         except socket.timeout:
             trials += 1
         print("iter")
     sock.settimeout(None)
-    print("outbound message reply " + msg_reply)
+    print("outbound message received " + msg_reply)
     if trials == max_trials:
         return "ERROR: unable to reach server"
     elif msg_reply == "OK":
@@ -358,15 +390,15 @@ while True:
                     print("ERROR: You must finish your game first")
                 else:
                     invite(msg)
-           # elif msg[0] == "play":
-           #     if opponent == " ":
-           #         print("You cannot play without choosing an opponent")
-           #     elif status == 0:
-           #         print("ERROR: You're not registered with the server")
-           #     elif status == 2:
-           #         print("ERROR: You must finish your game first")
-           #     else:
-           #         play(msg)
+            # elif msg[0] == "play":
+            #     if opponent == " ":
+            #         print("You cannot play without choosing an opponent")
+            #     elif status == 0:
+            #         print("ERROR: You're not registered with the server")
+            #     elif status == 2:
+            #         print("ERROR: You must finish your game first")
+            #     else:
+            #         play(msg)
 
             # envia mensagem da consola para o servidor
         # i == sock - o servidor enviou uma mensagem para o socket

@@ -137,10 +137,7 @@ while True:
     elif cmds[0] == "inviteR":
         print("Invitation Reply: " + msg)
         forward(cmds[1].split(';')[2], msg)
-    elif cmds[0] == "play":
-        forward(cmds[1].split(';')[1], msg)
-    elif cmds[0] == "OK" or cmds[0] == "NOK":
-        # relay client to client ack messages
+    elif cmds[0] == "OK" or cmds[0] == "NOK" or cmds[0] == "play" or cmds[0] == "fim":
         forward(cmds[1].split(';')[1], msg)
     elif cmds[0] == "busy":
         set_busy(addr)
