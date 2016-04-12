@@ -1,62 +1,151 @@
 import socket
 
 # Recebe no porto SERVER PORT os comandos "IAM <nome>", "HELLO",
-#    "HELLOTO <nome>" ou "KILLSERVER" 
+#    "HELLOTO <nome>" ou "KILLSERVER"
 # "IAM <nome>" - regista um cliente como <nome>
 # "HELLO" - responde HELLO ou HELLO <nome> se o cliente estiver registado
 # "HELLOTO <nome>" - envia HELLO para o cliente <nome>
 # "KILLSERVER" - mata o servidor
 
-#INICIALIZACAO
+# INICIALIZACAO
 
-SERVER_PORT=12000
+# Server port definition
+SERVER_PORT = 12000
 
-server = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-server.bind(('',12000))
+# UDP socket creation for client communication
+server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+server.bind(('', 12000))
 
-addrs   = {} # dict: nome -> endereco. Ex: addrs["user"]=('127.0.0.1',17234)
-clients = {} # dict: endereco -> nome. Ex: clients[('127.0.0.1',17234)]="user"
+# Lists to store information about client name and ip address
+addressList = {}  # dict: nome -> endereco, status. Ex: addrs["user"]=('127.0.0.1',17234)
+clientList = {}  # dict: endereco -> nome, status. Ex: clients[('127.0.0.1',17234)]="user"
+statusList = {} # dict: client -> status
+
+#  message list
+msg_invalid = "Command not recognized"
+msg_OK = "OK"
+msg_nOK_register = "NOK$name exists"
+msg_nOK_unregister = "NOK$name doesn't exist"
+msg_nOK_unknownclient = "NOK$requested player is not connected to the server"
+msg_nOK_busy = "NOK$Player is busy"
+msg_list = "LIST$"
 
 
-#FUNCOES DE CADA OPERACAO
+# Invalid option selected - command not recognized
+def invalid(address):
+    server.sendto(msg_invalid, address)
 
-def register_client(name,addr):
-  # se o nome nao existe e o endereco nao esta a ser usado
-  if not name in addrs and not addr in clients:
-    addrs[name] = addr
-    clients[addr] = name
 
-def respond_hello(addr):
-  respond_msg = "HELLO"
-  if addr in clients: #se addr estiver no dicinario clients, o utilizador existe
-    respond_msg += " " + clients[addr]
-  respond_msg += "\n"
-  server.sendto(respond_msg.encode(),addr)
+# Client register
+def register(client, address):
+    if not client in addressList and not address in clientList:
+        addressList[client] = address
+        clientList[address] = client
+        statusList[client] = "free"
+        server.sendto(msg_OK, address)
+    else:
+        server.sendto(msg_nOK_register, address)
 
-def forward_hello(name):
-  if name in addrs: #novamente, se estiver no dicionario o utilizador existe
-    respond_msg = "HELLO " + name + "\n" 
-    addr = addrs[name]
-    server.sendto(respond_msg.encode(),addr)
 
-def respond_error(addr):
-  respond_msg = "INVALID MESSAGE\n"
-  server.sendto(respond_msg.encode(),addr)
+def unregister(address):
+    client = clientList[address]
+    if client in addressList:
+        del addressList[client]
+        del statusList[client]
+        del clientList[address]
+        server.sendto(msg_OK, address)
+    else:
+        server.sendto(msg_nOK_unregister, address)
 
-#CORPO PRINCIPAL
 
+# Client List
+def client_list(address):
+    l = []
+    msg_str = ""
+    for keys, values in statusList.items():
+        msg_str = keys + ":"
+        msg_str += values
+        l.append(str(msg_str))
+    msg_out = msg_list + str(l)[1:len(str(l))-1]
+    outbound(msg_out, address)
+
+
+def outbound(msg_to_client, address):
+    trials = 0
+    max_trials = 9
+    # 1s timeout
+    server.settimeout(1.0)
+    msg_reply = ""
+
+    while trials < max_trials:
+        try:
+            server.sendto(msg_to_client, address)
+            (msg_reply, address) = server.recvfrom(1024)
+            break
+        except socket.timeout:
+            trials += 1
+
+    server.settimeout(None)
+
+    if trials == max_trials:
+        print("ERROR: did not receive ACK from client")
+
+
+# Client to Client message relay function
+def forward(name, message):
+    # message is already well formed (invite$player1;player2)
+    # ACK messages will use this function as well. their format will not be changed
+    # it's the client responsibility to create coherent messages
+    # server doesn't care if the message is received or not. Client needs to take care of that.
+    # in client2client communication, the server is just a relay between clients
+    if name in addressList:
+        message_relay = message
+        address = addressList[name]
+        server.sendto(message_relay, address)
+
+
+def set_busy(address):
+    statusList[clientList[address]] = "busy"
+
+
+def set_free(address):
+    statusList[clientList[address]] = "free"
+
+
+# MAIN BODY
 while True:
-  (msg,addr) = server.recvfrom(1024)
-  cmds = msg.decode().split()
-  if(cmds[0]=="IAM"):
-    register_client(cmds[1],addr)
-  elif(cmds[0]=="HELLO"):
-    respond_hello(addr)
-  elif(cmds[0]=="HELLOTO"):
-    forward_hello(cmds[1])
-  elif(cmds[0]=="KILLSERVER"):
-    break
-  else:
-    respond_error(addr)
+    (msg, addr) = server.recvfrom(1024)
+    # get the command
+    cmds = msg.decode().split('$')
+    if cmds[0] == "register":
+        register(cmds[1], addr)
+    elif cmds[0] == "unregister":
+        unregister(addr)
+    elif cmds[0] == "list":
+        client_list(addr)
+    elif cmds[0] == "invite":
+        print("Invitation: "+ msg)
+        # check if requested player exists in the server
+        if cmds[1].split(';')[1] in addressList:
+            # check if it's free
+            if statusList[cmds[1].split(';')[1]] == "free":
+                forward(cmds[1].split(';')[1], msg)
+            else:
+                server.sendto(msg_nOK_busy, addr)
+        else:
+            server.sendto(msg_nOK_unknownclient, addr)
+    elif cmds[0] == "inviteR":
+        print("Invitation Reply: " + msg)
+        forward(cmds[1].split(';')[2], msg)
+    elif cmds[0] == "OK" or cmds[0] == "NOK" or cmds[0] == "play" or cmds[0] == "fim":
+        forward(cmds[1].split(';')[1], msg)
+    elif cmds[0] == "busy":
+        set_busy(addr)
+    elif cmds[0] == "free":
+        set_free(addr)
+    elif cmds[0] == "kill":
+        break
+    else:
+        invalid(addr)
 
 server.close()
