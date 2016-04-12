@@ -241,7 +241,7 @@ def play_wait():
                 elif game_state == "draw":
                     outbound(end_msg_d)
                     continue
-                elif game_state == " ":
+                elif game_state == "ongoing":
                     ttt_play()
         elif result.split('$')[0] == "fim":
             print("Game ended: " + result.split('$')[1].split(';')[0])
@@ -257,24 +257,30 @@ def play_wait():
 
 
 def check_if_win():
+    # lines
     if board[0] == board[1] == board[2]:
         return "win"
-    if board[3] == board[4] == board[5]:
+    elif board[3] == board[4] == board[5]:
         return "win"
-    if board[6] == board[7] == board[8]:
+    elif board[6] == board[7] == board[8]:
         return "win"
-    if board[0] == board[3] == board[6]:
+    # columns
+    elif board[0] == board[3] == board[6]:
         return "win"
-    if board[1] == board[4] == board[7]:
+    elif board[1] == board[4] == board[7]:
         return "win"
-    if board[2] == board[5] == board[8]:
+    elif board[2] == board[5] == board[8]:
         return "win"
-    if board[0] == board[4] == board[8]:
+    # diagonals
+    elif board[0] == board[4] == board[8]:
         return "win"
-    if board[2] == board[4] == board[6]:
+    elif board[2] == board[4] == board[6]:
         return "win"
-    if board.count("X") == 5:
+    # full board, no win
+    elif board.count("X") == 5:
         return "draw"
+    else:
+        return "ongoing"
 
 
 def inbound(time):
