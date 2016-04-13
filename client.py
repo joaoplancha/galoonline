@@ -38,7 +38,6 @@ def ack_client(m):
     arg2 = m.split('$')[1].split(';')[0]
     arg1 = m.split('$')[1].split(';')[1]
     ack_msg = "OK$" + arg1 + ";" + arg2
-    print("ack: " + ack_msg)
     # send the ack to client (through server relay)
     sock.sendto(ack_msg, (SERVER_IP, SERVER_PORT))
 
@@ -117,12 +116,11 @@ def invite(m):
     result = outbound(invite_msg)
 
     if result == "OK":
-        print("invitation received by other client. waiting for reply")
+        print("invitation received by opponent. waiting for reply")
         (reply, address) = sock.recvfrom(1024)
         # result = inbound(60.0)
         if reply.split('$')[0] == "inviteR" and reply.split('$')[1].split(';')[0] == "Y":
             ack_client("OK$" + m[1] + ";" + name)
-            print("OK$" + name + ";" + m[1])
             print("Invitation accepted")
             update_status(2)
             update_opponent(m[1])
@@ -157,12 +155,8 @@ def invite_reply(m):
     if choice == "Y\n" or choice == "y\n" or choice == "\n":
         result = outbound(reply_msg_y)
         if result == "OK":
-            print(status)
             update_status(2)
-            print(status)
-            print(opponent)
             update_opponent(invite_msg[0])
-            print(opponent)
             sock.sendto("busy", (SERVER_IP, SERVER_PORT))
             global piece
             piece = "O"
@@ -200,16 +194,32 @@ def ttt_print():
 
 
 def ttt_play():
-    ttt_print()
-    print("Make your move (0-8)")
-    move = sys.stdin.readline()
-    place = int(move)
-    play(place)
-    return
+    while True:
+        ttt_print()
+        print("Make your move (0-8)")
+        print("enter 9 to give up")
+        move = sys.stdin.readline()
+        try : 
+            place = int(move)
+            play(place)
+            return
+        except:
+            print("Invalid play!")
 
 
 def play(place):
 
+    if place == 9:
+        quit_msg = "quit$" + name + ";" + opponent
+        # message to opponent
+        result = outbound(quit_msg)
+        update_status(1)
+        # message to server
+        outbound("free")
+        print("you've given up. quitting...")
+        # after server confirms reception, quits
+        return "quit"
+    
     msg_to_server = "play$" + name + ";" + opponent + ";" + str(place)
     result = outbound(msg_to_server)
 
@@ -218,7 +228,9 @@ def play(place):
         ttt_print()
         result = play_wait()
         if result == "quit":
-            sock.sendto("free", (SERVER_IP, SERVER_PORT))
+            # message to server
+            outbound("free")
+            # after server confirms reception, quits
             update_status(1)
             return
     else:
@@ -229,7 +241,7 @@ def play(place):
 def play_wait():
 
     ok_msg = "OK$" + name + ";" + opponent
-    nok_msg = "NOK$" + name + ";" + opponent + ";" + "Invalid move"
+    nok_msg = "NOK$" + name + ";" + opponent + ";" + "Invalid move, position taken"
     end_msg_v = "fim$" + name + ";" + opponent + ";" + "You WIN!"
     end_msg_d = "fim$" + name + ";" + opponent + ";" + "It's a Draw"
     game_state = 0
@@ -250,14 +262,23 @@ def play_wait():
 
         # result = inbound(1000.0)
         (result, address) = sock.recvfrom(1024)
-        print("jogada recebida: " + result)
+
+        # case the opponent quits the ongoing game
+        if result.split('$')[0] == "quit":
+            ack_client(result)
+            print("the other player gave up. quitting game...")
+            outbound("free$" + result.split('$')[1])
+            # sock.sendto("free", (SERVER_IP, SERVER_PORT))
+            update_status(1)
+            break
 
         if result.split('$')[0] == "fim":
             ack_client(result)
             print("Game ended. " + result.split('$')[1].split(';')[2])
             print("quitting game...")
+            outbound("free")
             update_status(1)
-            sock.sendto("free", (SERVER_IP, SERVER_PORT))
+            # sock.sendto("free", (SERVER_IP, SERVER_PORT)) # change. need ack from server
             break
 
         place = int(result.split('$')[1].split(';')[2])
@@ -280,7 +301,6 @@ def play_wait():
                 elif game_state == 0:
                     ttt_play()
         else:
-            print("result")
             sock.sendto("free", (SERVER_IP, SERVER_PORT))
             # clean game board
             ttt_start_game()
@@ -345,9 +365,7 @@ def outbound(msg_to_server):
             break
         except socket.timeout:
             trials += 1
-        print("iter")
     sock.settimeout(None)
-    print("outbound message received " + msg_reply)
     if trials == max_trials:
         return "ERROR: unable to reach server"
     elif msg_reply == "OK":

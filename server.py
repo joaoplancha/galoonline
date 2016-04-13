@@ -110,6 +110,8 @@ def set_busy(address):
 
 def set_free(address):
     statusList[clientList[address]] = "free"
+    server.sendto(msg_OK, address)
+
 
 
 # MAIN BODY
@@ -124,7 +126,6 @@ while True:
     elif cmds[0] == "list":
         client_list(addr)
     elif cmds[0] == "invite":
-        print("Invitation: "+ msg)
         # check if requested player exists in the server
         if cmds[1].split(';')[1] in addressList:
             # check if it's free
@@ -135,9 +136,8 @@ while True:
         else:
             server.sendto(msg_nOK_unknownclient, addr)
     elif cmds[0] == "inviteR":
-        print("Invitation Reply: " + msg)
-        forward(cmds[1].split(';')[2], msg)
-    elif cmds[0] == "OK" or cmds[0] == "NOK" or cmds[0] == "play" or cmds[0] == "fim":
+         forward(cmds[1].split(';')[2], msg)
+    elif cmds[0] == "OK" or cmds[0] == "NOK" or cmds[0] == "play" or cmds[0] == "fim" or cmds[0] == "quit":
         forward(cmds[1].split(';')[1], msg)
     elif cmds[0] == "busy":
         set_busy(addr)
