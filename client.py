@@ -97,6 +97,8 @@ def list_request():
         msg_reply = msg_reply.split('$')[1]
         l = msg_reply.split(', ')
         j = 0
+        if len(l[j].split(':'))== 1:
+            return
         while j < len(l):
             namel = str(l[j].split(":")[0]).replace('\'', "")
             statusl = str(l[j].split(":")[1]).replace('\'', "")
@@ -390,6 +392,10 @@ while True:
                     print("ERROR: You must finish your game first")
                 else:
                     invite(msg)
+            elif msg[0] == "quit":
+                msg[0] = "unregister"
+                unregister(msg)
+                quit()                
             # elif msg[0] == "play":
             #     if opponent == " ":
             #         print("You cannot play without choosing an opponent")
