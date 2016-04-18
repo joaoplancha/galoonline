@@ -155,15 +155,14 @@ def invite(m):
         # Checks if the received response is positive
         # result = inbound(60.0)
         if reply.split('$')[0] == "inviteR" and reply.split('$')[1].split(';')[0] == "Y":
+            # Informs the server that client is busy
+            outbound("busy")
             # Sends the reply ACK to invitee
             ack_client("OK$" + m[1] + ";" + name)
             print("Invitation accepted")
             # Updates own status and opponent status (locally)
             update_status(2)
             update_opponent(m[1])
-            # Informs the server that client is busy
-            # CHANGE: put this above ack_client and use outbound
-            sock.sendto("busy", (SERVER_IP, SERVER_PORT))
             # Defines own piece as 'X' and opponent piece as 'O'
             global piece
             piece = "X"
@@ -202,12 +201,13 @@ def invite_reply(m):
         # therefore is waiting for a reply
         result = outbound(reply_msg_y)
         if result == "OK":
-            # If the other inviter confirms the reception, updates all status,
+            # If the other inviter confirms the reception, 
+            # informs the server, updates all status,
             # defines the pieces as 'O' for client and 'X' for the inviter
             # and enters the waiting for play function
+            outbound("busy")
             update_status(2)
             update_opponent(invite_msg[0])
-            sock.sendto("busy", (SERVER_IP, SERVER_PORT))
             global piece
             piece = "O"
             global piece2
@@ -302,7 +302,7 @@ def play_wait():
 
     # Message definitions
     ok_msg = "OK$" + name + ";" + opponent
-    nok_msg = "NOK$" + name + ";" + opponent + ";" + "Invalid move, position taken"
+    nok_msg = "NOK$" + name + ";" + opponent + ";" + "Invalid move"
     end_msg_v = "fim$" + name + ";" + opponent + ";" + "You WIN!"
     end_msg_d = "fim$" + name + ";" + opponent + ";" + "It's a Draw"
     game_state = 0
@@ -349,7 +349,7 @@ def play_wait():
 
         if result.split('$')[0] == "play":
             # If play is not valid
-            if board[place] == "X" or board[place] == "O":
+            if place > 9 or board[place] == "X" or board[place] == "O":
                 # no need to send through outbound, it's dealt with on the client side
                 sock.sendto(nok_msg, (SERVER_IP, SERVER_PORT))
                 # continue to wait

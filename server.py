@@ -104,11 +104,14 @@ def forward(name, message):
 # Set client as busy
 def set_busy(address):
     statusList[clientList[address]] = "busy"
+    server.sendto(msg_OK, address)
+
 
 
 # Set client as free
 def set_free(address):
     statusList[clientList[address]] = "free"
+    server.sendto(msg_OK, address)
     server.sendto(msg_OK, address)
 
 
