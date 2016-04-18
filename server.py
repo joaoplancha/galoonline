@@ -1,12 +1,5 @@
 import socket
 
-# Recebe no porto SERVER PORT os comandos "IAM <nome>", "HELLO",
-#    "HELLOTO <nome>" ou "KILLSERVER"
-# "IAM <nome>" - regista um cliente como <nome>
-# "HELLO" - responde HELLO ou HELLO <nome> se o cliente estiver registado
-# "HELLOTO <nome>" - envia HELLO para o cliente <nome>
-# "KILLSERVER" - mata o servidor
-
 # INICIALIZACAO
 
 # Server port definition
@@ -38,15 +31,18 @@ def invalid(address):
 
 # Client register
 def register(client, address):
+    # if it's not registered already
     if not client in addressList and not address in clientList:
         addressList[client] = address
         clientList[address] = client
         statusList[client] = "free"
         server.sendto(msg_OK, address)
+    # it it exists, reply with nOK message
     else:
         server.sendto(msg_nOK_register, address)
 
 
+# Unregister client
 def unregister(address):
     client = clientList[address]
     if client in addressList:
@@ -58,7 +54,7 @@ def unregister(address):
         server.sendto(msg_nOK_unregister, address)
 
 
-# Client List
+# Client List - returns the client list
 def client_list(address):
     l = []
     msg_str = ""
@@ -70,6 +66,7 @@ def client_list(address):
     outbound(msg_out, address)
 
 
+# used to send messages that need to wait for an ack from the client
 def outbound(msg_to_client, address):
     trials = 0
     max_trials = 9
@@ -104,10 +101,12 @@ def forward(name, message):
         server.sendto(message_relay, address)
 
 
+# Set client as busy
 def set_busy(address):
     statusList[clientList[address]] = "busy"
 
 
+# Set client as free
 def set_free(address):
     statusList[clientList[address]] = "free"
     server.sendto(msg_OK, address)

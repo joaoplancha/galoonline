@@ -2,6 +2,13 @@ import socket
 import sys
 import select
 
+# Possible commands:
+# register <name>
+# unregister
+# list
+# invite <name>
+
+
 SERVER_PORT = 12000
 SERVER_IP = '127.0.0.1'
 
@@ -19,21 +26,28 @@ piece = " "
 piece2 = " "
 
 
+# updates the status of the client
 def update_status(new):
     global status
     status = new
 
 
+# in game mode, updates the status of the opponent
 def update_opponent(client):
     global opponent
     opponent = client
 
 
+# Acknowledge message (client - server comm)
 def ack_server():
     # send the ack to server
     sock.sendto("OK", (SERVER_IP, SERVER_PORT))
 
 
+# Acknowledge message (client - client comm)
+# Receives original message as argument
+# Constructs the ack message with elements received
+# Sends message to server (and server will relay to client)
 def ack_client(m):
     arg2 = m.split('$')[1].split(';')[0]
     arg1 = m.split('$')[1].split(';')[1]
@@ -42,34 +56,47 @@ def ack_client(m):
     sock.sendto(ack_msg, (SERVER_IP, SERVER_PORT))
 
 
+# Registers player on the server
 def register(m):
     msg_to_server = m[0] + "$" + m[1]
     result = outbound(msg_to_server)
 
-    # check if ACK was received by outbound()
+    # Check if ACK from the server was received by outbound function
     if result == "OK":
+        # If ACK was received, update client status to say it's free
         update_status(1)
+        # Puts the name in the "name" global variable.
         global name
         name = m[1]
         print("Registered with the name: " + name)
     else:
+        # If ACK was not received, prints the reason why
         print(result)
 
 
+# Unregisters the player from the server
 def unregister(m):
     msg_to_server = m[0]
     result = outbound(msg_to_server)
 
-    # check if ACK was received by outbound()
+    # Check if ACK from the server was received by outbound function
     if result == "OK":
+        # If ACK was received, update client status to unregistered status
         update_status(0)
         global name
+        # Player name is reset to empty string
         name = " "
     else:
+        # If ACK was not received, prints the reason why
         print(result)
 
 
+# Requests the player list from the server
+# The successful reception of the list is used as ACK from the server
+# therefore, the outbound function is not used here
 def list_request():
+    # Set the timeout to 1s
+    # If nothing is received from the server side, it tries again 10 times
     trials = 0
     max_trials = 9
     sock.settimeout(1.0)
@@ -79,15 +106,18 @@ def list_request():
         try:
             sock.sendto("list", (SERVER_IP, SERVER_PORT))
             (msg_reply, address) = sock.recvfrom(1024)
+            # If a message is received, sends ACK to server
             ack_server()
             break
         except socket.timeout:
             trials += 1
-
+    # Remove the timeout from the socket. It's back blocking
     sock.settimeout(None)
 
+    # If maximum of trials was reached without any reply, returns an error to user
     if trials == max_trials:
         print("ERROR: unable to reach server")
+    # Otherwise, prints the client list
     else:
         print("--------- PLAYER LIST ---------")
         print("-------------------------------")
@@ -101,37 +131,50 @@ def list_request():
         while j < len(l):
             namel = str(l[j].split(":")[0]).replace('\'', "")
             statusl = str(l[j].split(":")[1]).replace('\'', "")
-            # namel = str(l[j].split(":")[0])[1:len(str(l[j].split(":")[0]))]
-            # statusl = str(l[j].split(":")[1])[0:len(str(l[j].split(":")[0]))-1]
             print(namel + "\t\t\t" + statusl)
             j += 1
         print("-------------------------------")
 
 
+# Invites a certain player to play
 def invite(m):
     # invite message formation to send through server to the client we want to invite
     invite_msg = m[0] + "$" + name + ";" + m[1]
     # send the message to client through server
     # it's the server responsibility to interpret and relay as appropriate
+    # use of outbound function implies the need for an ACK reply
     result = outbound(invite_msg)
-
+    # If ACK is received, then the client assumes the message was well received
+    # by the invitee
     if result == "OK":
         print("invitation received by opponent. waiting for reply")
+        # It will now wait for the invitee response
+        # outbound function is not used in this case
         (reply, address) = sock.recvfrom(1024)
+        # There is no timeout here. It needs an action from the invitee
+        # Checks if the received response is positive
         # result = inbound(60.0)
         if reply.split('$')[0] == "inviteR" and reply.split('$')[1].split(';')[0] == "Y":
+            # Sends the reply ACK to invitee
             ack_client("OK$" + m[1] + ";" + name)
             print("Invitation accepted")
+            # Updates own status and opponent status (locally)
             update_status(2)
             update_opponent(m[1])
+            # Informs the server that client is busy
+            # CHANGE: put this above ack_client and use outbound
             sock.sendto("busy", (SERVER_IP, SERVER_PORT))
+            # Defines own piece as 'X' and opponent piece as 'O'
             global piece
             piece = "X"
             global piece2
             piece2 = "O"
+            # Starts the game creating a new board and entering play function
             ttt_start_game()
             ttt_play()
+        # If the reply is negative
         elif reply.split('$')[0] == "inviteR" and reply.split('$')[1].split(';')[0] == "N":
+            # Informs the opponent that the message was received
             ack_client("OK$" + m[1] + ";" + name)
             print("Invitation not accepted")
             return
@@ -141,10 +184,12 @@ def invite(m):
         print(result)
 
 
+# If client received an invite to play, it enters this function
+# Takes care of the response and follow up action
 def invite_reply(m):
 
     invite_msg = m[1].split(';')
-
+    # Possible reply message definition
     reply_msg_y = "inviteR$Y;" + invite_msg[1] + ";" + invite_msg[0]
     reply_msg_n = "inviteR$N;" + invite_msg[1] + ";" + invite_msg[0]
 
@@ -153,8 +198,13 @@ def invite_reply(m):
 
     choice = sys.stdin.readline()
     if choice == "Y\n" or choice == "y\n" or choice == "\n":
+        # If positive sends the reply through the outbound function
+        # therefore is waiting for a reply
         result = outbound(reply_msg_y)
         if result == "OK":
+            # If the other inviter confirms the reception, updates all status,
+            # defines the pieces as 'O' for client and 'X' for the inviter
+            # and enters the waiting for play function
             update_status(2)
             update_opponent(invite_msg[0])
             sock.sendto("busy", (SERVER_IP, SERVER_PORT))
@@ -169,11 +219,13 @@ def invite_reply(m):
             print(result)
             return
     elif choice == "N\n" or choice == "n\n":
+        # If negative
         outbound(reply_msg_n)
         return
     return
 
 
+# Creates a new empty board
 def ttt_start_game():
     global board
     board = []
@@ -183,6 +235,7 @@ def ttt_start_game():
         j += 1
 
 
+# Prints the board to the screen
 def ttt_print():
     print(" ")
     print(" " + str(board[0]) + " | " + str(board[1]) + " | " + str(board[2]))
@@ -193,6 +246,7 @@ def ttt_print():
     print(" ")
 
 
+# Receives the play from the client and executes it using play function
 def ttt_play():
     while True:
         ttt_print()
@@ -207,6 +261,7 @@ def ttt_play():
             print("Invalid play!")
 
 
+# Function that will execute the selected play
 def play(place):
 
     if place == 9:
@@ -223,23 +278,29 @@ def play(place):
     msg_to_server = "play$" + name + ";" + opponent + ";" + str(place)
     result = outbound(msg_to_server)
 
+    # If the ACK is received, updates own board, prints result on board and waits
     if result == "OK":
         board[place] = piece
         ttt_print()
         result = play_wait()
+        # If the reply from the other side is quit, quits game
         if result == "quit":
             # message to server
             outbound("free")
             # after server confirms reception, quits
             update_status(1)
             return
+    # If no OK (ack) or quit is received, gives the reason and client can play again
     else:
         print(result)
         ttt_play()
 
 
+# Function used to wait for the opponent to play
+# It also verifies if the play is valid or not and checks if someone won or it's a draw
 def play_wait():
 
+    # Message definitions
     ok_msg = "OK$" + name + ";" + opponent
     nok_msg = "NOK$" + name + ";" + opponent + ";" + "Invalid move, position taken"
     end_msg_v = "fim$" + name + ";" + opponent + ";" + "You WIN!"
@@ -261,6 +322,7 @@ def play_wait():
             break
 
         # result = inbound(1000.0)
+        # Waits for opponent's play
         (result, address) = sock.recvfrom(1024)
 
         # case the opponent quits the ongoing game
@@ -272,26 +334,32 @@ def play_wait():
             update_status(1)
             break
 
+        # game is ended, quit game and update server and self
         if result.split('$')[0] == "fim":
             ack_client(result)
             print("Game ended. " + result.split('$')[1].split(';')[2])
             print("quitting game...")
             outbound("free")
             update_status(1)
-            # sock.sendto("free", (SERVER_IP, SERVER_PORT)) # change. need ack from server
+            # CHANGE this to outbound to make sure server updates
             break
 
+        # If the game is not over...
         place = int(result.split('$')[1].split(';')[2])
 
         if result.split('$')[0] == "play":
+            # If play is not valid
             if board[place] == "X" or board[place] == "O":
+                # no need to send through outbound, it's dealt with on the client side
                 sock.sendto(nok_msg, (SERVER_IP, SERVER_PORT))
                 # continue to wait
                 continue
+            # If play is valid
             else:
                 board[place] = piece2
                 sock.sendto(ok_msg, (SERVER_IP, SERVER_PORT))
                 game_state = check_if_win()
+                # End game verification and message sending
                 if game_state == 1:
                     outbound(end_msg_v)
                     continue
@@ -300,6 +368,9 @@ def play_wait():
                     continue
                 elif game_state == 0:
                     ttt_play()
+        # If something bad happens, it clears the game board and quits the game
+        # Also warns the server
+        # CHANGE to outbound
         else:
             sock.sendto("free", (SERVER_IP, SERVER_PORT))
             # clean game board
@@ -310,6 +381,8 @@ def play_wait():
         return "quit"
 
 
+# Auxiliary function to check if opponent has won
+# returns 1 if the opponent has won, 2 if it's a draw and 0 in any other case
 def check_if_win():
     # lines
     if board[0] == board[1] == board[2]:
@@ -337,6 +410,7 @@ def check_if_win():
         return 0
 
 
+# not used for now
 def inbound(time):
     sock.settimeout(time)
     try:
@@ -348,6 +422,11 @@ def inbound(time):
         return "ERROR: No reply received from the client"
 
 
+# Key function to client - client comm
+# Sends a message to other client through server
+# Waits for the ACK from the other side
+# It has a timeout of 1s, and 10 times to retry.
+# Returns the received message or error result
 def outbound(msg_to_server):
     trials = 0
     max_trials = 9
@@ -376,6 +455,8 @@ def outbound(msg_to_server):
         return "OK"
 
 
+# Main program cycle. Alternated between receiving commands from keyboard and
+# invite messages from other clients (through server)
 while True:
     print("Input message to server below.")
     ins, outs, exs = select.select(inputs, [], [])
@@ -383,11 +464,12 @@ while True:
     for i in ins:
         # i == sys.stdin - alguem escreveu na consola, vamos ler e enviar
         if i == sys.stdin:
-            # sys.stdin.readline() le da consola
+            # Formats the received command as appropriate
             msg_temp = sys.stdin.readline()
             msg_temp = msg_temp.replace('\n', '')
             msg = msg_temp.split(' ')
 
+            # Keyboard input: Self explanatory
             if msg[0] == "register":
                 if status != 0:
                     print("ERROR: You're already registered with the server")
@@ -413,24 +495,16 @@ while True:
             elif msg[0] == "quit":
                 msg[0] = "unregister"
                 unregister(msg)
-                quit()                
-            # elif msg[0] == "play":
-            #     if opponent == " ":
-            #         print("You cannot play without choosing an opponent")
-            #     elif status == 0:
-            #         print("ERROR: You're not registered with the server")
-            #     elif status == 2:
-            #         print("ERROR: You must finish your game first")
-            #     else:
-            #         play(msg)
-
-            # envia mensagem da consola para o servidor
-        # i == sock - o servidor enviou uma mensagem para o socket
+                quit()
+        # If received something from the network it will continue here.
         elif i == sock:
             (msg_temp, addr) = sock.recvfrom(1024)
             ack_client(msg_temp)
             msg = msg_temp.split('$')
+            # If the message is invite, it will enter the invite_reply function
             if msg[0] == "invite" and status == 1:
                 invite_reply(msg)
+            # unless client is busy, in which case replies not available
+            # this doesn't actually do anything....... :-(
             elif msg[0] == "invite" and status == 2:
                 print("Not available at the moment. Playing a game")
