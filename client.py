@@ -494,8 +494,9 @@ while True:
                 else:
                     invite(msg)
             elif msg[0] == "quit":
-                msg[0] = "unregister"
-                unregister(msg)
+            	if status != 0:
+                	msg[0] = "unregister"
+                	unregister(msg)
                 quit()
         # If received something from the network it will continue here.
         elif i == sock:
