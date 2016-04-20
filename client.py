@@ -7,6 +7,7 @@ import select
 # unregister
 # list
 # invite <name>
+# quit
 
 
 SERVER_PORT = 12000
